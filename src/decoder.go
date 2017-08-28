@@ -53,4 +53,17 @@ func (decoder *Decoder) readInt() (int, error) {
   return 0, errors.New("readInt error: " + string(code))
 }
 
-
+func (decoder Decoder) readBoolean() (bool, error) {
+  code, err := decoder.read()
+  if err != nil {
+    return false, err
+  }
+  switch code {
+  case 0x54:
+    return true, nil
+  case 0x46:
+    return false, nil
+  default:
+    return false, errors.New("readBoolean error: unexpected code, 'T' or 'F' expected")
+  }
+}
