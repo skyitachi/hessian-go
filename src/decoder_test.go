@@ -109,3 +109,24 @@ func TestReadString(t *testing.T) {
 		t.Errorf("readString: decoder error")
 	}
 }
+
+func TestReadDouble(t *testing.T) {
+	{
+		code := []byte{0x44, 0x3f, 0xf1, 0xf9, 0xad, 0xbb, 0x8f, 0x8d, 0xa7}
+		decoder := NewDecoder(code)
+		f, err := decoder.ReadDouble()
+		unexpected_error(err, t)
+		if f != 1.1234567 {
+			t.Errorf("readDouble: decoder error")
+		}
+	}
+	{
+		code := []byte{0x5b}
+		decoder := NewDecoder(code)
+		f, err := decoder.ReadDouble()
+		unexpected_error(err, t)
+		if f != 0.0 {
+			t.Errorf("readDouble: decoder error")
+		}
+	}
+}

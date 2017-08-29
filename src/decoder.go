@@ -211,7 +211,8 @@ func (decoder *Decoder) ReadBinary() ([]byte, error) {
  *      ::= [xd8-xef]
  *      ::= [xf0-xff] b0
  *      ::= [x38-x3f] b1 b0
- *      ::= x4c b3 b2 b1 b0
+ *      ::= x4c b3 b2 b1 b0 // hessian 2 java use 0x59, hessian 3 use 0x77
+ * here we use 0x59
  */
 func (decoder Decoder) ReadLong() (int64, error) {
 	code, err := decoder.read()
@@ -239,6 +240,59 @@ func (decoder Decoder) ReadLong() (int64, error) {
 			return -1, errors.New("readLong error: unexpected length")
 		}
 		return parseInt64(int8(code-0x3c), bits), nil
+	case code == 0x59:
+		bits := decoder.readn(4)
+		if len(bits) < 4 {
+			return -1, errors.New("readLong error: unexpected length")
+		}
+		return parseInt64(int8(bits[0]), bits[1:]), nil
 	}
 	return -1, errors.New("readLong error: unexpected code")
+}
+
+/**
+ *   double ::= D b7 b6 b5 b4 b3 b2 b1 b0
+ *          ::= x5b
+ *          ::= x5c
+ *          ::= x5d b0
+ *          ::= x5e b1 b0
+ *          ::= x5f b3 b2 b1 b0
+ */
+func (decoder Decoder) ReadDouble() (float64, error) {
+	code, err := decoder.read()
+	if err != nil {
+		return -1, err
+	}
+	switch {
+	case code == 0x44:
+		bits := decoder.readn(8)
+		if len(bits) < 8 {
+			return 0.0, errors.New("readDouble: unexpected length")
+		}
+		return parseFloat64FromBytes(bits), nil
+	case code == 0x5b:
+		return 0.0, nil
+	case code == 0x5c:
+		return 1.0, nil
+	case code == 0x5d:
+		bits := decoder.readn(1)
+		if len(bits) < 1 {
+			return 0.0, errors.New("readDouble: unexpected length")
+		}
+		return float64(int8(bits[0])), nil
+	case code == 0x5e:
+		bits := decoder.readn(2)
+		if len(bits) < 2 {
+			return 0.0, errors.New("readDouble: unexpected length")
+		}
+		return float64(parseInt16(int8(bits[0]), bits[1])), nil
+	case code == 0x5f:
+		bits := decoder.readn(4)
+		if len(bits) < 4 {
+			return 0.0, errors.New("readDouble: unexpected length")
+		}
+		return float64(parseFloat32FromBytes(bits)), nil
+	default:
+		return 0.0, errors.New("readDouble: unexpected length")
+	}
 }
