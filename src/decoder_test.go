@@ -2,7 +2,6 @@ package hessian
 
 import (
   "testing"
-  "fmt"
   "strings"
 )
 
@@ -46,7 +45,6 @@ func TestReadString(t *testing.T) {
   decoder := NewDecoder(code)
   s, err := decoder.ReadString()
   unexpected_error(err, t)
-  fmt.Printf("ans is %s, size is %d\n", s, len(s))
   if strings.Compare(s,"hello") != 0 {
     t.Errorf("readString: decoder error")
   }
@@ -55,8 +53,14 @@ func TestReadString(t *testing.T) {
   decoder = NewDecoder(code)
   s, err = decoder.ReadString()
   unexpected_error(err, t)
-  fmt.Println(len(s))
   if strings.Compare(s, "你好") != 0 {
+    t.Errorf("readString: decoder error")
+  }
+  code = []byte{0x52, 0x00, 0x01, 0xe4, 0xbd, 0xa0, 0x53, 0x00, 0x01, 0xe5, 0xa5, 0xbd}
+  decoder = NewDecoder(code)
+  s, err = decoder.ReadString()
+  unexpected_error(err, t)
+  if s != "你好" {
     t.Errorf("readString: decoder error")
   }
 }
