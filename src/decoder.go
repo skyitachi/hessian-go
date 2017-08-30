@@ -2,8 +2,11 @@ package hessian
 
 import (
 	"bytes"
-	"github.com/pkg/errors"
+	"errors"
+	"time"
 )
+
+var TIME_DEFAULT_VALUE = time.Unix(0, 0)
 
 type Decoder struct {
 	buf       *bytes.Buffer
@@ -52,7 +55,7 @@ func (decoder *Decoder) ReadInt() (int32, error) {
 		if len(bits) < 4 {
 			return 0, errors.New("readInt error: unexpected length of bytes")
 		}
-		return parseInt32(int8(bits[0]), bits[1:]), nil
+		return parseInt32FromBytes(bits), nil
 	}
 	if code >= 0x80 && code <= 0xbf {
 		return int32(code - 0x80), nil
@@ -225,9 +228,9 @@ func (decoder Decoder) ReadLong() (int64, error) {
 		if len(bits) < 8 {
 			return -1, errors.New("readLong error: unexpected length")
 		}
-		return parseInt64(int8(bits[0]), bits[1:]), nil
+		return parseInt64FromBytes(bits), nil
 	case code >= 0xd8 && code <= 0xef:
-		return parseInt64(int8(code-0xe0), []byte{}), nil
+    return parseInt64(int8(code-0xe0), []byte{}), nil
 	case code >= 0xf0 && code <= 0xff:
 		bits := decoder.readn(1)
 		if len(bits) < 1 {
@@ -245,7 +248,7 @@ func (decoder Decoder) ReadLong() (int64, error) {
 		if len(bits) < 4 {
 			return -1, errors.New("readLong error: unexpected length")
 		}
-		return parseInt64(int8(bits[0]), bits[1:]), nil
+		return parseInt64FromBytes(bits), nil
 	}
 	return -1, errors.New("readLong error: unexpected code")
 }
@@ -295,4 +298,29 @@ func (decoder Decoder) ReadDouble() (float64, error) {
 	default:
 		return 0.0, errors.New("readDouble: unexpected length")
 	}
+}
+
+func (decoder Decoder) ReadDate() (time.Time, error) {
+	code, err := decoder.read()
+  if err != nil {
+    return TIME_DEFAULT_VALUE, err
+  }
+  switch code {
+  case 0x4a:
+    bits := decoder.readn(8)
+    if len(bits) < 8 {
+      return TIME_DEFAULT_VALUE, errors.New("readDate: unexpected length")
+    }
+    ms := parseInt64FromBytes(bits)
+    return time.Unix(ms / 1000, (ms % 1000) * 1e6), nil
+  case 0x4b:
+    bits := decoder.readn(4)
+    if len(bits) < 4 {
+      return TIME_DEFAULT_VALUE, errors.New("readDate: unexpected length")
+    }
+    minutes := parseInt64FromBytes(bits)
+    return time.Unix(minutes * 60, 0), nil
+  default:
+    return TIME_DEFAULT_VALUE, errors.New("readDate: unexpected code")
+  }
 }

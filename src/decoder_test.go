@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+  "time"
 )
 
 func unexpected_error(err error, t *testing.T) {
@@ -51,7 +52,7 @@ func TestReadLong(t *testing.T) {
 		unexpected_error(err, t)
 		fmt.Printf("ret is: %d\n", n)
 		if n != -1 {
-			t.Errorf("bytes: 0xdf should be decoded to -1")
+			t.Errorf("bytes: 0xdf should be decoded to 1")
 		}
 	}
 	// -1024L
@@ -129,4 +130,28 @@ func TestReadDouble(t *testing.T) {
 			t.Errorf("readDouble: decoder error")
 		}
 	}
+}
+
+func TestReadDate(t *testing.T) {
+	{
+		code := []byte{0x4a, 0x00, 0x00, 0x01, 0x5e, 0x31, 0x6b, 0xe5, 0xce}
+		decoder := NewDecoder(code)
+    ti, err := decoder.ReadDate()
+		unexpected_error(err, t)
+    y, m, d := ti.Date()
+    if y != 2017 || m != time.August || d != 30 {
+      t.Errorf("readDate: decoder error")
+    }
+	}
+  {
+    code := []byte{0x4b, 0x00, 0xb2, 0xe6, 0xc0}
+    decoder := NewDecoder(code)
+    ti, err := decoder.ReadDate()
+    unexpected_error(err, t)
+    y, m, d := ti.Date()
+    fmt.Println(y, m, d)
+    if y != 1992 || m != time.April || d != 17 {
+      t.Errorf("readDate: decoder error")
+    }
+  }
 }
