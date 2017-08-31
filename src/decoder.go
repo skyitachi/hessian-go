@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"time"
+  "fmt"
 )
 var TIME_DEFAULT_VALUE = time.Unix(0, 0)
 
@@ -11,10 +12,18 @@ type Decoder struct {
 	buf       *bytes.Buffer
   lastChunk bool
   types []string
+  refMap map[int32]interface{}
+  refId int32
 }
 
 func NewDecoder(b []byte) *Decoder {
-	return &Decoder{bytes.NewBuffer(b), false, []string{}}
+	return &Decoder{
+    buf:bytes.NewBuffer(b),
+    lastChunk: false,
+    types: []string{},
+    refMap: make(map[int32]interface{}),
+    refId: 0,
+  }
 }
 
 func (decoder *Decoder) read() (byte, error) {
@@ -43,6 +52,11 @@ func (decoder *Decoder) read_n_rune(n int) string {
 		}
 	}
 	return string(ret)
+}
+
+func (decoder *Decoder) addRef(ref interface{}) {
+  decoder.refMap[decoder.refId] = ref
+  decoder.refId++
 }
 
 func (decoder *Decoder) ReadInt() (int32, error) {
@@ -325,39 +339,80 @@ func (decoder Decoder) ReadDate() (time.Time, error) {
   }
 }
 
-func (decoder Decoder) ReadNull() (error) {
+func (decoder *Decoder) ReadNull() (interface{}, error) {
   code, err := decoder.read()
   if err != nil {
-    return err
+    return nil, err
   }
   if code == 0x4e {
-    return nil
+    return nil, nil
   }
-  return errors.New("readNull: unexpected code")
+  return nil, errors.New("readNull: unexpected code")
 }
 
 /**
- * type ::= type-string(putRawString)
- *      ::= type-ref(writeInt)
+ * ref :: = x51 int
  */
-func (decoder *Decoder) ReadType() (string, error) {
+func (decoder *Decoder) ReadRef() (interface{}, error){
   code, err := decoder.read()
   if err != nil {
-    return "", err
+    return nil, err
   }
-  code_int := int(code)
-  offset := code_int - int(0x90)
-  if len(decoder.types) <= offset || offset < 0 {
-    // no stored type read it as length
-    bits := decoder.readn(code_int)
-    if len(bits) < code_int {
-      return "", errors.New("readType: unexpected length")
+  if code != 0x51 {
+    return nil, errors.New("readRef: unexpected code")
+  }
+  refId, err := decoder.ReadInt()
+  if err != nil {
+    return nil, err
+  }
+  ret, ok := decoder.refMap[refId]
+  if !ok {
+    return nil, errors.New("readRef: unexpected ref")
+  }
+  return ret, nil
+}
+
+/**
+ * type ::= string
+ *      ::= int(type-ref)
+ */
+func (decoder *Decoder) ReadType() (string, error) {
+  s, err := decoder.ReadString()
+  if err != nil {
+    // TODO need unread
+    refId, err := decoder.ReadInt()
+    if err != nil {
+      return "", errors.New("readType: unexpected code")
     }
-    parsed := string(bits)
-    decoder.types = append(decoder.types, parsed)
-    return parsed, nil
-  } else if offset >= 0 {
-    return decoder.types[offset], nil
+    ref, ok := decoder.refMap[refId]
+    if !ok {
+      return "", errors.New("readType: unknown type")
+    }
+    stringType, ok := ref.(string) // assertion
+    if !ok {
+      return "", errors.New("readType: unknown type")
+    }
+    return stringType, nil
   }
-  return "", errors.New("readType: unexpected code")
+  decoder.addRef(s)
+  return s, nil
+}
+
+// TODO
+func (decoder *Decoder) ReadArray() ([]int, error) {
+  code, err := decoder.read()
+  if err != nil {
+    return []int{}, err
+  }
+  switch {
+  case code >= 0x70 && code <= 0x77:
+    // size := code - 0x70
+    parsedType, err := decoder.ReadType()
+    if err != nil {
+      return []int{}, err
+    }
+    fmt.Println(parsedType)
+
+  }
+  return []int{}, nil
 }

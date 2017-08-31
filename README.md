@@ -4,3 +4,6 @@
 ### log
 - ReadInt will return int32
 - ReadLong will return int64
+
+#### TODO
+- error recover

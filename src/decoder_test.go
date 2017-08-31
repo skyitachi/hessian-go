@@ -177,10 +177,21 @@ func TestReadNull(t *testing.T) {
   {
     code := []byte{0x4e}
     decoder := NewDecoder(code)
-    err := decoder.ReadNull()
+    r, err := decoder.ReadNull()
     unexpected_error(err, t)
-    if err != nil {
+    if r != nil {
       t.Errorf("readNull:decoder error")
     }
+  }
+}
+
+func TestReadList(t *testing.T) {
+  {
+    code := []byte{0x71,0x12,0x5b,0x6a,0x61,0x76,0x61,0x2e,0x6c,0x61,0x6e,0x67,0x2e,0x49,0x6e,0x74,0x65,0x67,0x65,0x72,0x91}
+    decoder := NewDecoder(code)
+    ret, err := decoder.ReadArray()
+    unexpected_error(err, t)
+    fmt.Println(ret)
+    t.FailNow()
   }
 }
