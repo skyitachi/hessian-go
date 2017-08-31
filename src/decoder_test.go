@@ -155,3 +155,32 @@ func TestReadDate(t *testing.T) {
     }
   }
 }
+
+func TestReadType(t *testing.T) {
+  {
+    code := []byte{0x03, 0x43, 0x61, 0x72, 0x90}
+    decoder := NewDecoder(code)
+    t1, err := decoder.ReadType()
+    unexpected_error(err, t)
+    if t1 != "Car" {
+      t.Errorf("readType: decoder error")
+    }
+    t2, err := decoder.ReadType()
+    unexpected_error(err, t)
+    if t2 != "Car" {
+      t.Errorf("readType: decoder error")
+    }
+  }
+}
+
+func TestReadNull(t *testing.T) {
+  {
+    code := []byte{0x4e}
+    decoder := NewDecoder(code)
+    err := decoder.ReadNull()
+    unexpected_error(err, t)
+    if err != nil {
+      t.Errorf("readNull:decoder error")
+    }
+  }
+}

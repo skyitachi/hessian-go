@@ -5,16 +5,16 @@ import (
 	"errors"
 	"time"
 )
-
 var TIME_DEFAULT_VALUE = time.Unix(0, 0)
 
 type Decoder struct {
 	buf       *bytes.Buffer
-	lastChunk bool
+  lastChunk bool
+  types []string
 }
 
 func NewDecoder(b []byte) *Decoder {
-	return &Decoder{bytes.NewBuffer(b), false}
+	return &Decoder{bytes.NewBuffer(b), false, []string{}}
 }
 
 func (decoder *Decoder) read() (byte, error) {
@@ -323,4 +323,41 @@ func (decoder Decoder) ReadDate() (time.Time, error) {
   default:
     return TIME_DEFAULT_VALUE, errors.New("readDate: unexpected code")
   }
+}
+
+func (decoder Decoder) ReadNull() (error) {
+  code, err := decoder.read()
+  if err != nil {
+    return err
+  }
+  if code == 0x4e {
+    return nil
+  }
+  return errors.New("readNull: unexpected code")
+}
+
+/**
+ * type ::= type-string(putRawString)
+ *      ::= type-ref(writeInt)
+ */
+func (decoder *Decoder) ReadType() (string, error) {
+  code, err := decoder.read()
+  if err != nil {
+    return "", err
+  }
+  code_int := int(code)
+  offset := code_int - int(0x90)
+  if len(decoder.types) <= offset || offset < 0 {
+    // no stored type read it as length
+    bits := decoder.readn(code_int)
+    if len(bits) < code_int {
+      return "", errors.New("readType: unexpected length")
+    }
+    parsed := string(bits)
+    decoder.types = append(decoder.types, parsed)
+    return parsed, nil
+  } else if offset >= 0 {
+    return decoder.types[offset], nil
+  }
+  return "", errors.New("readType: unexpected code")
 }
