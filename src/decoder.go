@@ -6,7 +6,14 @@ import (
 	"time"
   "fmt"
 )
+
 var TIME_DEFAULT_VALUE = time.Unix(0, 0)
+type ReadInt_Type func () (int32, error)
+
+type List struct {
+  ValueType string
+  Value []interface{}
+}
 
 type Decoder struct {
 	buf       *bytes.Buffer
@@ -14,6 +21,8 @@ type Decoder struct {
   types []string
   refMap map[int32]interface{}
   refId int32
+  byteCount int32 // how many bytes read after last successful read, for recovery
+  runeCount int32 // ...
 }
 
 func NewDecoder(b []byte) *Decoder {
@@ -23,15 +32,46 @@ func NewDecoder(b []byte) *Decoder {
     types: []string{},
     refMap: make(map[int32]interface{}),
     refId: 0,
+    byteCount: 0,
+    runeCount: 0,
   }
 }
 
+func (decoder *Decoder) success() {
+  decoder.byteCount = 0
+  decoder.runeCount = 0
+}
+
+func (decoder *Decoder) Recover() {
+  decoder.unread_n_byte(decoder.byteCount)
+  decoder.unread_n_rune(decoder.runeCount)
+  decoder.success()
+}
+
 func (decoder *Decoder) read() (byte, error) {
+  decoder.byteCount += 1
 	return decoder.buf.ReadByte()
 }
 
 func (decoder *Decoder) readn(n int) []byte {
-	return decoder.buf.Next(n)
+  bs := decoder.buf.Next(n)
+  l := len(bs)
+  decoder.byteCount += int32(l)
+  return bs
+}
+
+func (decoder *Decoder) unread_n_byte(n int32) {
+  var i int32
+  for i = 0; i < n; i++ {
+    decoder.buf.UnreadByte()
+  }
+}
+
+func (decoder *Decoder) unread_n_rune(n int32) {
+  var i int32
+  for i = 0; i < n; i++ {
+    decoder.buf.UnreadRune()
+  }
 }
 
 func (decoder *Decoder) read_n_rune(n int) string {
@@ -51,7 +91,21 @@ func (decoder *Decoder) read_n_rune(n int) string {
 			break
 		}
 	}
+  decoder.runeCount += int32(len(ret))
 	return string(ret)
+}
+
+func (decoder *Decoder) readFixedLengthTypedValue(length int, typeName string) ([]interface{}, error) {
+  ret := []interface{}{}
+  for i := 0; i < length; i++ {
+    v, err := dynamic_call(decoder, typeName)
+    if err != nil {
+      fmt.Println(err)
+      return []interface{}{}, errors.New("readFixedLengthTypedValue: unexpected type value")
+    }
+    ret = append(ret, v)
+  }
+  return ret, nil
 }
 
 func (decoder *Decoder) addRef(ref interface{}) {
@@ -69,16 +123,19 @@ func (decoder *Decoder) ReadInt() (int32, error) {
 		if len(bits) < 4 {
 			return 0, errors.New("readInt error: unexpected length of bytes")
 		}
+    decoder.success()
 		return parseInt32FromBytes(bits), nil
 	}
 	if code >= 0x80 && code <= 0xbf {
-		return int32(code - 0x80), nil
+    decoder.success()
+		return int32(int8(code - 0x90)), nil
 	}
 	if code >= 0xc0 && code <= 0xcf {
 		b0, err := decoder.read()
 		if err != nil {
 			return 0, err
 		}
+    decoder.success()
 		return parseInt32(int8(code-0xc8), []byte{b0}), nil
 	}
 	if code >= 0xd0 && code <= 0xd7 {
@@ -86,6 +143,7 @@ func (decoder *Decoder) ReadInt() (int32, error) {
 		if len(bits) < 2 {
 			return 0, errors.New("readInt error: unexpected length of bytes")
 		}
+    decoder.success()
 		return parseInt32(int8(code-0xd4), bits), nil
 	}
 	// throw error
@@ -99,8 +157,10 @@ func (decoder Decoder) ReadBoolean() (bool, error) {
 	}
 	switch code {
 	case 0x54:
+    decoder.success()
 		return true, nil
 	case 0x46:
+    decoder.success()
 		return false, nil
 	default:
 		return false, errors.New("readBoolean error: unexpected code, 'T' or 'F' expected")
@@ -128,6 +188,7 @@ func (decoder *Decoder) ReadString() (string, error) {
 		if len(ret) < size {
 			return "", errors.New("readString error: unexpected length")
 		}
+    decoder.success()
 		return ret, nil
 	case code == 0x52:
 		bits := decoder.readn(2)
@@ -144,6 +205,7 @@ func (decoder *Decoder) ReadString() (string, error) {
 			ret += chunk
 		}
 		decoder.lastChunk = false
+    decoder.success()
 		return ret, nil
 	case code >= 0x00 && code <= 0x1f:
 		size := int(code)
@@ -151,6 +213,7 @@ func (decoder *Decoder) ReadString() (string, error) {
 		if len(ret) < size {
 			return "", errors.New("readString error: unexpected length")
 		}
+    decoder.success()
 		return ret, nil
 	case code >= 0x30 && code <= 0x33:
 		bits := decoder.readn(1)
@@ -162,6 +225,7 @@ func (decoder *Decoder) ReadString() (string, error) {
 		if len(ret) < size {
 			return "", errors.New("readString error: unexpected length")
 		}
+    decoder.success()
 		return ret, nil
 	default:
 		return "", errors.New("readString error: unexpected code")
@@ -198,6 +262,7 @@ func (decoder *Decoder) ReadBinary() ([]byte, error) {
 		}
 		// reset
 		decoder.lastChunk = false
+    decoder.success()
 		return ret, nil
 	case code == 0x42 /*B*/ :
 		decoder.lastChunk = true
@@ -210,6 +275,7 @@ func (decoder *Decoder) ReadBinary() ([]byte, error) {
 		if len(bits) < size {
 			return nil, errors.New("readBinary error: unexpected length")
 		}
+    decoder.success()
 		return bits, nil
 	case code >= 0x20 && code <= 0x2f:
 		size := int(code - 0x20)
@@ -217,6 +283,7 @@ func (decoder *Decoder) ReadBinary() ([]byte, error) {
 		if len(ret) < size {
 			return nil, errors.New("readBinary error: unexpected length")
 		}
+    decoder.success()
 		return ret, nil
 	default:
 		return nil, errors.New("readBinary error: unexpected code")
@@ -242,6 +309,7 @@ func (decoder Decoder) ReadLong() (int64, error) {
 		if len(bits) < 8 {
 			return -1, errors.New("readLong error: unexpected length")
 		}
+    decoder.success()
 		return parseInt64FromBytes(bits), nil
 	case code >= 0xd8 && code <= 0xef:
     return parseInt64(int8(code-0xe0), []byte{}), nil
@@ -250,18 +318,21 @@ func (decoder Decoder) ReadLong() (int64, error) {
 		if len(bits) < 1 {
 			return -1, errors.New("readLong error: unexpected length")
 		}
+    decoder.success()
 		return parseInt64(int8(code-0xf8), bits), nil
 	case code >= 0x38 && code <= 0x3f:
 		bits := decoder.readn(2)
 		if len(bits) < 2 {
 			return -1, errors.New("readLong error: unexpected length")
 		}
+    decoder.success()
 		return parseInt64(int8(code-0x3c), bits), nil
 	case code == 0x59:
 		bits := decoder.readn(4)
 		if len(bits) < 4 {
 			return -1, errors.New("readLong error: unexpected length")
 		}
+    decoder.success()
 		return parseInt64FromBytes(bits), nil
 	}
 	return -1, errors.New("readLong error: unexpected code")
@@ -286,28 +357,34 @@ func (decoder Decoder) ReadDouble() (float64, error) {
 		if len(bits) < 8 {
 			return 0.0, errors.New("readDouble: unexpected length")
 		}
+    decoder.success()
 		return parseFloat64FromBytes(bits), nil
 	case code == 0x5b:
+    decoder.success()
 		return 0.0, nil
 	case code == 0x5c:
+    decoder.success()
 		return 1.0, nil
 	case code == 0x5d:
 		bits := decoder.readn(1)
 		if len(bits) < 1 {
 			return 0.0, errors.New("readDouble: unexpected length")
 		}
+    decoder.success()
 		return float64(int8(bits[0])), nil
 	case code == 0x5e:
 		bits := decoder.readn(2)
 		if len(bits) < 2 {
 			return 0.0, errors.New("readDouble: unexpected length")
 		}
+    decoder.success()
 		return float64(parseInt16(int8(bits[0]), bits[1])), nil
 	case code == 0x5f:
 		bits := decoder.readn(4)
 		if len(bits) < 4 {
 			return 0.0, errors.New("readDouble: unexpected length")
 		}
+    decoder.success()
 		return float64(parseFloat32FromBytes(bits)), nil
 	default:
 		return 0.0, errors.New("readDouble: unexpected length")
@@ -325,6 +402,7 @@ func (decoder Decoder) ReadDate() (time.Time, error) {
     if len(bits) < 8 {
       return TIME_DEFAULT_VALUE, errors.New("readDate: unexpected length")
     }
+    decoder.success()
     ms := parseInt64FromBytes(bits)
     return time.Unix(ms / 1000, (ms % 1000) * 1e6), nil
   case 0x4b:
@@ -332,6 +410,7 @@ func (decoder Decoder) ReadDate() (time.Time, error) {
     if len(bits) < 4 {
       return TIME_DEFAULT_VALUE, errors.New("readDate: unexpected length")
     }
+    decoder.success()
     minutes := parseInt64FromBytes(bits)
     return time.Unix(minutes * 60, 0), nil
   default:
@@ -345,6 +424,7 @@ func (decoder *Decoder) ReadNull() (interface{}, error) {
     return nil, err
   }
   if code == 0x4e {
+    decoder.success()
     return nil, nil
   }
   return nil, errors.New("readNull: unexpected code")
@@ -369,6 +449,7 @@ func (decoder *Decoder) ReadRef() (interface{}, error){
   if !ok {
     return nil, errors.New("readRef: unexpected ref")
   }
+  decoder.success()
   return ret, nil
 }
 
@@ -379,7 +460,7 @@ func (decoder *Decoder) ReadRef() (interface{}, error){
 func (decoder *Decoder) ReadType() (string, error) {
   s, err := decoder.ReadString()
   if err != nil {
-    // TODO need unread
+    decoder.Recover()
     refId, err := decoder.ReadInt()
     if err != nil {
       return "", errors.New("readType: unexpected code")
@@ -392,27 +473,48 @@ func (decoder *Decoder) ReadType() (string, error) {
     if !ok {
       return "", errors.New("readType: unknown type")
     }
+    decoder.success()
     return stringType, nil
   }
   decoder.addRef(s)
+  decoder.success()
   return s, nil
 }
 
-// TODO
-func (decoder *Decoder) ReadArray() ([]int, error) {
+func (decoder *Decoder) ReadList() (List, error) {
   code, err := decoder.read()
   if err != nil {
-    return []int{}, err
+    return List{}, err
   }
   switch {
   case code >= 0x70 && code <= 0x77:
-    // size := code - 0x70
+    size := int(code - 0x70)
     parsedType, err := decoder.ReadType()
+    // parsedType startWith '[', eg: "[java.lang.Integer"
     if err != nil {
-      return []int{}, err
+      fmt.Println("parse type error")
+      return List{}, err
     }
-    fmt.Println(parsedType)
-
+    ret := List{
+      ValueType: parsedType[1:],
+      Value: []interface{}{},
+    }
+    listValue, err := decoder.readFixedLengthTypedValue(size, parsedType[1:])
+    if err != nil {
+      return List{}, err
+    }
+    ret.Value = listValue
+    return ret, nil
   }
-  return []int{}, nil
+  return List{}, nil
+}
+
+func dynamic_call(decoder *Decoder, typeName string) (interface{}, error) {
+  switch typeName {
+  case "java.lang.Integer":
+    fallthrough
+  case "int":
+    return decoder.ReadInt()
+  }
+  return nil, errors.New("no such method")
 }

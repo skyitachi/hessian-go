@@ -5,10 +5,12 @@ import (
 	"strings"
 	"testing"
   "time"
+  "log"
 )
 
 func unexpected_error(err error, t *testing.T) {
 	if err != nil {
+    log.Println(err)
 		t.FailNow()
 	}
 }
@@ -187,11 +189,35 @@ func TestReadNull(t *testing.T) {
 
 func TestReadList(t *testing.T) {
   {
+    originValue := []int32{1}
     code := []byte{0x71,0x12,0x5b,0x6a,0x61,0x76,0x61,0x2e,0x6c,0x61,0x6e,0x67,0x2e,0x49,0x6e,0x74,0x65,0x67,0x65,0x72,0x91}
     decoder := NewDecoder(code)
-    ret, err := decoder.ReadArray()
+    ret, err := decoder.ReadList()
     unexpected_error(err, t)
-    fmt.Println(ret)
-    t.FailNow()
+    if len(ret.Value) != len(originValue) {
+      t.Errorf("readList: decoder error")
+    }
+
+    for idx, v := range ret.Value {
+      if v != originValue[idx] {
+        t.Errorf("readList: decoder error")
+      }
+    }
+  }
+  {
+    originValue := []int32{1, -1, 65536}
+    code := []byte{0x73, 0x04, 0x5b, 0x69, 0x6e, 0x74, 0x91,0x8f, 0xd5, 0x00, 0x00}
+    decoder := NewDecoder(code)
+    ret, err := decoder.ReadList()
+    unexpected_error(err, t)
+    if len(ret.Value) != len(originValue) {
+      t.Errorf("readList: decoder error")
+    }
+    for idx, v := range ret.Value {
+      fmt.Println("v is ", v)
+      if v != originValue[idx] {
+        t.Errorf("readList: decoder error")
+      }
+    }
   }
 }
