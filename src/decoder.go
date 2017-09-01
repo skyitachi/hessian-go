@@ -6,9 +6,7 @@ import (
 	"time"
   "fmt"
 )
-
 var TIME_DEFAULT_VALUE = time.Unix(0, 0)
-type ReadInt_Type func () (int32, error)
 
 type List struct {
   ValueType string
@@ -43,6 +41,7 @@ func (decoder *Decoder) success() {
 }
 
 func (decoder *Decoder) Recover() {
+  // FIXME: have problems
   decoder.unread_n_byte(decoder.byteCount)
   decoder.unread_n_rune(decoder.runeCount)
   decoder.success()
