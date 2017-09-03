@@ -6,7 +6,9 @@ import (
 	"time"
   "fmt"
 )
+const UNTYPED = "untyped"
 var TIME_DEFAULT_VALUE = time.Unix(0, 0)
+var CODE_TO_TYPE = map[byte]string{}
 
 type List struct {
   ValueType string
@@ -101,6 +103,22 @@ func (decoder *Decoder) readFixedLengthTypedValue(length int, typeName string) (
     if err != nil {
       fmt.Println(err)
       return []interface{}{}, errors.New("readFixedLengthTypedValue: unexpected type value")
+    }
+    ret = append(ret, v)
+  }
+  return ret, nil
+}
+
+func (decoder *Decoder) readFixedLengthUnTypedValue(length int) ([]interface{}, error) {
+  ret := []interface{}{}
+  for i := 0; i < length; i++ {
+    code, err := decoder.read()
+    if err != nil {
+      return []interface{}{}, err
+    }
+    v, err := dynamic_call(decoder, CODE_TO_TYPE[code])
+    if err != nil {
+      return []interface{}{}, err
     }
     ret = append(ret, v)
   }
@@ -480,12 +498,69 @@ func (decoder *Decoder) ReadType() (string, error) {
   return s, nil
 }
 
+/**
+list ::= x55 type value* 'Z'   # variable-length list
+     ::= 'V' type int value*   # fixed-length list
+     ::= x57 value* 'Z'        # variable-length untyped list
+     ::= x58 int value*        # fixed-length untyped list
+     ::= [x70-77] type value*  # fixed-length typed list
+     ::= [x78-7f] value*       # fixed-length untyped list
+*/
 func (decoder *Decoder) ReadList() (List, error) {
   code, err := decoder.read()
   if err != nil {
     return List{}, err
   }
   switch {
+  case code == 0x55:
+    parsedType, err := decoder.ReadType()
+    if err != nil {
+      return List{}, err
+    }
+    listValue := []interface{}{}
+    for {
+      v, err := dynamic_call(decoder, parsedType)
+      listValue := append(listValue, v)
+      if err != nil {
+        decoder.Recover()
+        end, err := decoder.read()
+        if err != nil || end != 0x5a /*Z*/ {
+          return List{}, errors.New("readList: unexpected code")
+        } else {
+          return List{
+            ValueType: parsedType,
+            Value: listValue,
+          }, nil
+        }
+      }
+    }
+  case code == 0x56:
+    parsedType, err := decoder.ReadType()
+    if err != nil {
+      return List{}, err
+    }
+    size, err := decoder.ReadInt()
+    if err != nil {
+      return List{}, err
+    }
+    listValue, err := decoder.readFixedLengthTypedValue(int(size), parsedType)
+    if err != nil {
+      return List{}, err
+    }
+    return List{parsedType, listValue}, nil
+  case code == 0x58:
+    size, err := decoder.ReadInt()
+    if err != nil {
+      return List{}, err
+    }
+    listValue, err := decoder.readFixedLengthUnTypedValue(int(size))
+    if err != nil {
+      return List{}, err
+    }
+    return List{
+      ValueType: UNTYPED,
+      Value: listValue,
+    }, nil
   case code >= 0x70 && code <= 0x77:
     size := int(code - 0x70)
     parsedType, err := decoder.ReadType()
@@ -514,6 +589,8 @@ func dynamic_call(decoder *Decoder, typeName string) (interface{}, error) {
     fallthrough
   case "int":
     return decoder.ReadInt()
+  case "double":
+    return decoder.ReadDouble()
   }
   return nil, errors.New("no such method")
 }
