@@ -6,4 +6,5 @@
 - ReadLong will return int64
 
 #### TODO
-- error recover
+- [x] error recover
+- [ ] byte_code to type map

@@ -1,8 +1,9 @@
 package hessian
 import (
-	"encoding/binary"
-	"math"
+  "encoding/binary"
+  "math"
 )
+
 func parseInt32FromBytes(bits []byte) int32 {
 	l := len(bits)
 	var ret int32 = int32(int8(bits[0]) << uint((l - 1)* 8))

@@ -8,7 +8,6 @@ import (
 )
 const UNTYPED = "untyped"
 var TIME_DEFAULT_VALUE = time.Unix(0, 0)
-var CODE_TO_TYPE = map[byte]string{}
 
 type List struct {
   ValueType string
@@ -594,3 +593,4 @@ func dynamic_call(decoder *Decoder, typeName string) (interface{}, error) {
   }
   return nil, errors.New("no such method")
 }
+
