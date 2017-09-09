@@ -42,7 +42,7 @@ func (decoder *Decoder) success() {
 }
 
 func (decoder *Decoder) Recover() {
-  // FIXME: have problems
+  // FIXME: have problems 顺序问题
   decoder.unread_n_byte(decoder.byteCount)
   decoder.unread_n_rune(decoder.runeCount)
   decoder.success()
@@ -582,6 +582,44 @@ func (decoder *Decoder) ReadList() (List, error) {
   return List{}, nil
 }
 
+func (decoder *Decoder) ReadMap() (map[interface{}]interface{}, error) {
+  code, err := decoder.read()
+  if err != nil {
+    return nil, err
+  }
+  if code != 0x48 {
+    return nil, errors.New("decoder ReadMap: unexpected error")
+  }
+  ret := map[interface{}]interface{}{}
+  for {
+    code, err = decoder.read()
+    if err != nil {
+      return nil, err
+    }
+    if code == 0x5a {
+      break
+    }
+    keyType := CODE_TO_TYPE[code]
+    decoder.unread_n_byte(1)
+    key, err := dynamic_call(decoder, keyType)
+    if err != nil {
+      return nil, err
+    }
+    code, err = decoder.read()
+    if err != nil {
+      return nil, err
+    }
+    valueType := CODE_TO_TYPE[code]
+    decoder.unread_n_byte(1)
+    value, err := dynamic_call(decoder, valueType)
+    if err != nil {
+      return nil, err
+    }
+    ret[key] = value
+  }
+  return ret, nil
+}
+
 func dynamic_call(decoder *Decoder, typeName string) (interface{}, error) {
   switch typeName {
   case "java.lang.Integer":
@@ -590,6 +628,8 @@ func dynamic_call(decoder *Decoder, typeName string) (interface{}, error) {
     return decoder.ReadInt()
   case "double":
     return decoder.ReadDouble()
+  case "string":
+    return decoder.ReadString()
   }
   return nil, errors.New("no such method")
 }

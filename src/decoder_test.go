@@ -6,6 +6,7 @@ import (
 	"testing"
   "time"
   "log"
+  "reflect"
 )
 
 func unexpected_error(err error, t *testing.T) {
@@ -217,6 +218,37 @@ func TestReadList(t *testing.T) {
       fmt.Println("v is ", v)
       if v != originValue[idx] {
         t.Errorf("readList: decoder error")
+      }
+    }
+  }
+}
+
+func TestReadMap(t *testing.T) {
+  {
+    /**
+       map[int32]string{
+        1: "hello"
+        2: "hello"
+       }
+     */
+    code := []byte{0x48,0x91,0x05,0x68,0x65,0x6C,0x6C,0x6F,0x92,0x05,0x68,0x65,0x6C,0x6C,0x6F,0x5A}
+    decoder := NewDecoder(code)
+    ret, err := decoder.ReadMap()
+    unexpected_error(err, t)
+    for k, v:= range ret {
+      if reflect.TypeOf(k).Name() != "int32" {
+        t.Errorf("readMap: decoder error")
+      }
+      if reflect.TypeOf(v).Name() != "string" {
+        t.Errorf("readMap: decoder error")
+      }
+      kTyped := reflect.ValueOf(k).Interface().(int32)
+      vTyped := reflect.ValueOf(v).Interface().(string)
+      if kTyped == 1 && vTyped != "hello" {
+        t.Errorf("readMap: decoder error")
+      }
+      if kTyped == 2 && vTyped != "hello" {
+        t.Errorf("readMap: decoder error")
       }
     }
   }
