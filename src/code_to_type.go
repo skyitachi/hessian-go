@@ -24,4 +24,5 @@ func init() {
   addCode(0x52, "string")
   addCodeRange(0x00, 0x1f, "string")
   addCodeRange(0x30, 0x33, "string")
+  addCode(0x4d, "typedmap")
 }

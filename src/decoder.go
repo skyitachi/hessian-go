@@ -14,6 +14,11 @@ type List struct {
   Value []interface{}
 }
 
+type UntypedMap struct {
+  ValueType string
+  Value map[string]interface{}
+}
+
 type Decoder struct {
 	buf       *bytes.Buffer
   lastChunk bool
@@ -563,9 +568,7 @@ func (decoder *Decoder) ReadList() (List, error) {
   case code >= 0x70 && code <= 0x77:
     size := int(code - 0x70)
     parsedType, err := decoder.ReadType()
-    // parsedType startWith '[', eg: "[java.lang.Integer"
     if err != nil {
-      fmt.Println("parse type error")
       return List{}, err
     }
     ret := List{
@@ -582,6 +585,7 @@ func (decoder *Decoder) ReadList() (List, error) {
   return List{}, nil
 }
 
+// read untyped map
 func (decoder *Decoder) ReadMap() (map[interface{}]interface{}, error) {
   code, err := decoder.read()
   if err != nil {
@@ -620,6 +624,49 @@ func (decoder *Decoder) ReadMap() (map[interface{}]interface{}, error) {
   return ret, nil
 }
 
+func (decoder *Decoder) ReadTypedMap() (UntypedMap, error){
+  code, err := decoder.read()
+  if err != nil {
+    return nil, err
+  }
+  if code != 0x4d {
+    return nil, errors.New("decoder ReadMap: unexpected error")
+  }
+  ret := UntypedMap{}
+  typeName, err := decoder.ReadString()
+  if err != nil {
+    return nil, err
+  }
+  ret.ValueType = typeName
+  ret.Value = map[string]interface{}{}
+  for {
+    code, err := decoder.read()
+    if err != nil {
+      return nil, err
+    }
+    if code == 0x5a {
+      break
+    }
+    decoder.unread_n_byte(1)
+    propertyName, err := decoder.ReadString()
+    if err != nil {
+      return nil, err
+    }
+    code, err = decoder.read()
+    if err != nil {
+      return nil, err
+    }
+    valueType := CODE_TO_TYPE[code]
+    decoder.unread_n_byte(1)
+    value, err := dynamic_call(decoder, valueType)
+    if err != nil {
+      return nil, err
+    }
+    ret.Value[propertyName] = value
+  }
+  return ret, nil
+}
+
 func dynamic_call(decoder *Decoder, typeName string) (interface{}, error) {
   switch typeName {
   case "java.lang.Integer":
@@ -630,6 +677,13 @@ func dynamic_call(decoder *Decoder, typeName string) (interface{}, error) {
     return decoder.ReadDouble()
   case "string":
     return decoder.ReadString()
+  case "long":
+    fallthrough
+  case "java.lang.Long":
+    return decoder.ReadLong()
+  case "typedmap":
+    return decoder.ReadTypedMap()
+
   }
   return nil, errors.New("no such method")
 }
