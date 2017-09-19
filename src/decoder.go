@@ -14,7 +14,7 @@ type List struct {
   Value []interface{}
 }
 
-type UntypedMap struct {
+type TypedMap struct {
   ValueType string
   Value map[string]interface{}
 }
@@ -28,6 +28,8 @@ type Decoder struct {
   byteCount int32 // how many bytes read after last successful read, for recovery
   runeCount int32 // ...
 }
+
+var emptyTypedMap = TypedMap{}
 
 func NewDecoder(b []byte) *Decoder {
 	return &Decoder{
@@ -624,25 +626,25 @@ func (decoder *Decoder) ReadMap() (map[interface{}]interface{}, error) {
   return ret, nil
 }
 
-func (decoder *Decoder) ReadTypedMap() (UntypedMap, error){
+func (decoder *Decoder) ReadTypedMap() (TypedMap, error){
   code, err := decoder.read()
   if err != nil {
-    return nil, err
+    return emptyTypedMap, err
   }
   if code != 0x4d {
-    return nil, errors.New("decoder ReadMap: unexpected error")
+    return emptyTypedMap, errors.New("decoder ReadMap: unexpected error")
   }
-  ret := UntypedMap{}
+  ret := TypedMap{}
   typeName, err := decoder.ReadString()
   if err != nil {
-    return nil, err
+    return emptyTypedMap, err
   }
   ret.ValueType = typeName
   ret.Value = map[string]interface{}{}
   for {
     code, err := decoder.read()
     if err != nil {
-      return nil, err
+      return emptyTypedMap, err
     }
     if code == 0x5a {
       break
@@ -650,17 +652,17 @@ func (decoder *Decoder) ReadTypedMap() (UntypedMap, error){
     decoder.unread_n_byte(1)
     propertyName, err := decoder.ReadString()
     if err != nil {
-      return nil, err
+      return emptyTypedMap, err
     }
     code, err = decoder.read()
     if err != nil {
-      return nil, err
+      return emptyTypedMap, err
     }
     valueType := CODE_TO_TYPE[code]
     decoder.unread_n_byte(1)
     value, err := dynamic_call(decoder, valueType)
     if err != nil {
-      return nil, err
+      return emptyTypedMap, err
     }
     ret.Value[propertyName] = value
   }

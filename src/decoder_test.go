@@ -33,6 +33,26 @@ func TestReadInt(t *testing.T) {
 			t.Errorf("bytes: 0xd00000 should be decoded to -262144")
 		}
 	}
+  // -1
+  {
+    code := []byte{0x8f}
+    decoder := NewDecoder(code)
+    n, err := decoder.ReadInt()
+    unexpected_error(err, t)
+    if n != -1 {
+      t.Errorf("bytes: 0x8f should be decoded to -1")
+    }
+  }
+  // 65536
+  {
+    code := []byte{0xd5, 0x00, 0x00}
+    decoder := NewDecoder(code)
+    n, err := decoder.ReadInt()
+    unexpected_error(err, t)
+    if n != 65536 {
+      t.Errorf("bytes: 0x8f should be decoded to -1")
+    }
+  }
 }
 
 func TestReadLong(t *testing.T) {
