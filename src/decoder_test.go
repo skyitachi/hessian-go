@@ -50,7 +50,7 @@ func TestReadInt(t *testing.T) {
     n, err := decoder.ReadInt()
     unexpected_error(err, t)
     if n != 65536 {
-      t.Errorf("bytes: 0x8f should be decoded to -1")
+      t.Errorf("bytes: 0x8f should be decoded to 65536")
     }
   }
 }
