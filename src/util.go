@@ -2,31 +2,37 @@ package hessian
 import (
   "encoding/binary"
   "math"
+  "bytes"
 )
 
-func parseInt32FromBytes(bits []byte) int32 {
-	l := len(bits)
-	var ret int32 = int32(int8(bits[0]) << uint((l - 1)* 8))
-	for i := 1; i < l; i++ {
-		ret += int32(bits[i]) << uint((l-i-1)*8)
-	}
-	return ret
-}
-
-func parseInt16FromBytes(bits []byte) int16 {
-  var ret int16
-  ret += int16(int8(bits[0]) << 8) + int16(bits[0])
-  return ret
-}
-
-func parseInt64FromBytes(bits []byte) int64 {
+// 不足4位需要补足
+func parseInt32FromBytes(bits []byte) (ret int32) {
   l := len(bits)
-  var ret int64
-  ret += int64(int8(bits[0])) << uint((l - 1)*8)
-  for i := 1; i < l; i++ {
-    ret += int64(bits[i]) << uint((l-i-1)*8)
+  if l < 4 {
+    complements := []byte{}
+    for i := 0; i < 4 - l; i++ {
+      complements = append(complements, 0)
+    }
+    bits = append(complements, bits...)
   }
-  return ret
+  buf := bytes.NewBuffer(bits)
+  binary.Read(buf, binary.BigEndian, &ret)
+  return
+}
+
+// 不足8位需补齐
+func parseInt64FromBytes(bits []byte) (ret int64) {
+  l := len(bits)
+  if l < 8 {
+    complements := []byte{}
+    for i := 0; i < 8 - l; i++ {
+      complements = append(complements, 0)
+    }
+    bits = append(complements, bits...)
+  }
+  buf := bytes.NewBuffer(bits)
+  binary.Read(buf, binary.BigEndian, &ret)
+  return
 }
 
 func parseFloat64FromBytes(bits []byte) float64 {

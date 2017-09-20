@@ -18,7 +18,7 @@ func TestParseInt64FromBytes(t *testing.T) {
     code := []byte{0x3b, 0x9a, 0xca, 0x01}
     ret := parseInt64FromBytes(code)
     if ret != 1000000001 {
-      t.Errorf("parseInt64FromBytes error")
+      t.Errorf("parseInt64FromBytes error: expect 1000000001 found %d", ret)
     }
   }
 

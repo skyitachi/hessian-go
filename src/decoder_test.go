@@ -53,6 +53,26 @@ func TestReadInt(t *testing.T) {
       t.Errorf("bytes: 0x8f should be decoded to 65536")
     }
   }
+  // 2147483647
+  {
+    code := []byte{0x49, 0x7f, 0xff, 0xff, 0xff}
+    decoder := NewDecoder(code)
+    n, err := decoder.ReadInt()
+    unexpected_error(err, t)
+    if n != 2147483647 {
+      t.Errorf("bytes 0x497fffffff should be decoded to 2147483647 found %d", n)
+    }
+  }
+  // -2147483648
+  {
+    code := []byte{0x49, 0x80, 0x00, 0x00, 0x00}
+    decoder := NewDecoder(code)
+    n, err := decoder.ReadInt()
+    unexpected_error(err, t)
+    if n != -2147483648 {
+      t.Errorf("bytes 0x4980000000 should be decoded to 2147483647 found %d", n)
+    }
+  }
 }
 
 func TestReadLong(t *testing.T) {
@@ -270,6 +290,30 @@ func TestReadMap(t *testing.T) {
       if kTyped == 2 && vTyped != "hello" {
         t.Errorf("readMap: decoder error")
       }
+    }
+  }
+}
+
+func TestReadTypedMap(t *testing.T) {
+  {
+    /**
+     * class PlainObject {
+     *    String name = "ysp";
+     *    int value = 123;
+     * }
+     */
+    code := []byte{0x4D,0x0B,0x50,0x6C,0x61,0x69,0x6E,0x4F,0x62,0x6A,0x65,0x63,0x74,0x04,0x6E,0x61,0x6D,0x65,0x03,0x79,0x73,0x70,0x05,0x76,0x61,0x6C,0x75,0x65,0xC8,0x7B,0x5A}
+    decoder := NewDecoder(code)
+    ret, err := decoder.ReadTypedMap()
+    unexpected_error(err, t)
+    if ret.ValueType != "PlainObject" {
+      t.Errorf("readTypedMap decode error: expect %s found %s", "PlainObject", ret.ValueType)
+    }
+    if ret.Value["name"] != "ysp" {
+      t.Errorf("readTypedMap decode error: expect %s found %s", "ysp", ret.Value["name"])
+    }
+    if ret.Value["value"].(int32) != 123 {
+      t.Errorf("readTypedMap decode error: expect %d found %d", 123, ret.Value["value"])
     }
   }
 }
